@@ -101,7 +101,33 @@ echo
 echo "[4/10] Checking networking tools..."
 
 install_package nmap
-install_package wireshark
+
+# --------------------------------------------------
+# Wireshark
+# Force safest option:
+# non-superusers are NOT allowed to capture packets
+# --------------------------------------------------
+
+echo
+echo "[CHECK] Wireshark..."
+
+if dpkg -s wireshark >/dev/null 2>&1; then
+
+    echo "[OK] wireshark is already installed."
+
+else
+
+    echo "[INSTALL] Installing Wireshark..."
+
+    echo "wireshark-common wireshark-common/install-setuid boolean false" \
+        | sudo debconf-set-selections
+
+    sudo DEBIAN_FRONTEND=noninteractive apt install -y wireshark
+
+    echo "[OK] Wireshark installed."
+
+fi
+
 install_package tcpdump
 install_package aircrack-ng
 install_package network-manager
@@ -183,11 +209,16 @@ echo "[CHECK] Verifying old SSD mount mode..."
 MOUNT_OPTIONS="$(findmnt -no OPTIONS "$OLD_SSD_MOUNT")"
 
 if echo "$MOUNT_OPTIONS" | grep -qw "ro"; then
+
     echo "[OK] Old SSD is mounted read-only."
+
 else
+
     echo "[ERROR] Old SSD is NOT mounted read-only."
     echo "Mount options: $MOUNT_OPTIONS"
+
     exit 1
+
 fi
 
 # --------------------------------------------------
@@ -291,10 +322,15 @@ fi
 # --------------------------------------------------
 
 if systemctl is-active --quiet keyd; then
+
     echo "[OK] Keyd is running."
+
 else
+
     echo "[ERROR] Keyd failed to start."
+
     exit 1
+
 fi
 
 # --------------------------------------------------
@@ -314,12 +350,13 @@ else
 
     install_package gnupg
 
-    OOKLA_REPO="https://packagecloud.io/ookla/speedtest-cli"
+    if grep -Rqs "packagecloud.io/ookla/speedtest-cli" \
+        /etc/apt/sources.list \
+        /etc/apt/sources.list.d 2>/dev/null; then
 
-    if [ ! -f /etc/apt/sources.list.d/ookla_speedtest-cli.list ] && \
-       ! grep -Rqs "packagecloud.io/ookla/speedtest-cli" \
-       /etc/apt/sources.list \
-       /etc/apt/sources.list.d 2>/dev/null; then
+        echo "[OK] Ookla Speedtest repository is already configured."
+
+    else
 
         echo "[REPO] Adding Ookla Speedtest repository..."
 
@@ -332,10 +369,6 @@ else
         echo "[UPDATE] Updating package lists..."
 
         sudo apt update
-
-    else
-
-        echo "[OK] Ookla Speedtest repository is already configured."
 
     fi
 
@@ -367,6 +400,10 @@ nmcli --version
 echo
 echo "Nmap:"
 nmap --version | head -1
+
+echo
+echo "Wireshark:"
+wireshark --version 2>/dev/null | head -1 || true
 
 echo
 echo "Keyd:"
