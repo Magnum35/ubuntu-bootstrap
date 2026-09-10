@@ -9,10 +9,26 @@ echo "================================"
 echo
 
 # --------------------------------------------------
+# Function: install a package if it is not installed
+# --------------------------------------------------
+
+install_package() {
+    local package="$1"
+
+    if dpkg -s "$package" >/dev/null 2>&1; then
+        echo "[OK] $package is already installed."
+    else
+        echo "[INSTALL] Installing $package..."
+        sudo apt install -y "$package"
+    fi
+}
+
+# --------------------------------------------------
 # 1. Update package lists
 # --------------------------------------------------
 
 echo "[1/5] Updating package lists..."
+
 sudo apt update
 
 # --------------------------------------------------
@@ -20,11 +36,12 @@ sudo apt update
 # --------------------------------------------------
 
 echo
-echo "[2/5] Installing Git..."
+echo "[2/5] Checking Git..."
 
-sudo apt install -y git
+install_package git
 
-echo "Git installed:"
+echo
+echo "Git version:"
 git --version
 
 # --------------------------------------------------
@@ -32,26 +49,25 @@ git --version
 # --------------------------------------------------
 
 echo
-echo "[3/5] Installing core CLI tools..."
+echo "[3/5] Checking core CLI tools..."
 
-sudo apt install -y \
-    curl \
-    wget \
-    jq \
-    tree \
-    unzip \
-    zip \
-    rsync \
-    tmux \
-    htop \
-    btop \
-    ncdu \
-    ripgrep \
-    fd-find \
-    file \
-    lsof \
-    shellcheck \
-    nano
+install_package curl
+install_package wget
+install_package jq
+install_package tree
+install_package unzip
+install_package zip
+install_package rsync
+install_package tmux
+install_package htop
+install_package btop
+install_package ncdu
+install_package ripgrep
+install_package fd-find
+install_package file
+install_package lsof
+install_package shellcheck
+install_package nano
 
 # --------------------------------------------------
 # 4. Mount old SSD read-only
@@ -66,13 +82,13 @@ OLD_SSD_MOUNT="/mnt/old-ssd"
 sudo mkdir -p "$OLD_SSD_MOUNT"
 
 if mountpoint -q "$OLD_SSD_MOUNT"; then
-    echo "Old SSD is already mounted at $OLD_SSD_MOUNT."
+    echo "[OK] Old SSD is already mounted at $OLD_SSD_MOUNT."
 else
-    echo "Mounting $OLD_SSD read-only..."
+    echo "[MOUNT] Mounting $OLD_SSD read-only..."
 
     sudo mount -o ro "$OLD_SSD" "$OLD_SSD_MOUNT"
 
-    echo "Old SSD mounted successfully."
+    echo "[OK] Old SSD mounted successfully."
 fi
 
 # --------------------------------------------------
@@ -96,6 +112,6 @@ sudo ls "$OLD_SSD_MOUNT"
 
 echo
 echo "================================"
-echo " Bootstrap stage complete!"
+echo "Bootstrap stage complete!"
 echo "================================"
 ```
