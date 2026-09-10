@@ -1,3 +1,4 @@
+bash
 #!/usr/bin/env bash
 
 set -e
@@ -19,21 +20,6 @@ install_package() {
     else
         echo "[INSTALL] Installing $package..."
         sudo apt install -y "$package"
-    fi
-}
-
-# --------------------------------------------------
-# Function: check if a command exists
-# --------------------------------------------------
-
-check_command() {
-    local command_name="$1"
-
-    if command -v "$command_name" >/dev/null 2>&1; then
-        echo "[OK] Command '$command_name' is available."
-    else
-        echo "[ERROR] Command '$command_name' is not available."
-        return 1
     fi
 }
 
@@ -101,12 +87,6 @@ echo
 echo "[4/10] Checking networking tools..."
 
 install_package nmap
-
-# --------------------------------------------------
-# Wireshark
-# Force safest option:
-# non-superusers are NOT allowed to capture packets
-# --------------------------------------------------
 
 echo
 echo "[CHECK] Wireshark..."
@@ -200,7 +180,7 @@ else
 fi
 
 # --------------------------------------------------
-# Verify old SSD is actually read-only
+# Verify old SSD is read-only
 # --------------------------------------------------
 
 echo
@@ -228,13 +208,12 @@ fi
 echo
 echo "[9/10] Restoring Keyd..."
 
-# add-apt-repository is provided by software-properties-common
 install_package software-properties-common
 
 KEYD_PPA="ppa:keyd-team/ppa"
 
 # --------------------------------------------------
-# Check whether Keyd PPA already exists
+# Check Keyd PPA
 # --------------------------------------------------
 
 if grep -Rqs "ppa.launchpadcontent.net/keyd-team/ppa" \
@@ -264,61 +243,101 @@ fi
 install_package keyd
 
 # --------------------------------------------------
+# Keyd paths
+# --------------------------------------------------
+
+OLD_KEYD_CONFIG="/mnt/old-ssd/etc/keyd/default.conf"
+CURRENT_KEYD_DIR="/etc/keyd"
+CURRENT_KEYD_CONFIG="/etc/keyd/default.conf"
+
+# --------------------------------------------------
 # Check old Keyd configuration
 # --------------------------------------------------
 
-OLD_KEYD_CONFIG="$OLD_SSD_MOUNT/etc/keyd"
-CURRENT_KEYD_CONFIG="/etc/keyd"
+echo
+echo "[CHECK] Looking for Keyd configuration..."
 
-if [ ! -d "$OLD_KEYD_CONFIG" ]; then
+if [ ! -f "$OLD_KEYD_CONFIG" ]; then
 
-    echo
-    echo "[ERROR] Old Keyd configuration was not found:"
+    echo "[ERROR] Required Keyd configuration was not found:"
     echo "$OLD_KEYD_CONFIG"
 
     exit 1
 
 fi
 
-echo
-echo "[OK] Old Keyd configuration found."
+echo "[OK] Found:"
+echo "$OLD_KEYD_CONFIG"
 
 # --------------------------------------------------
-# Restore Keyd configuration
+# Create current Keyd directory
 # --------------------------------------------------
 
-echo
-echo "[RESTORE] Restoring Keyd configuration..."
-
-sudo mkdir -p "$CURRENT_KEYD_CONFIG"
-
-sudo cp -a "$OLD_KEYD_CONFIG/." "$CURRENT_KEYD_CONFIG/"
-
-echo "[OK] Keyd configuration restored."
+sudo mkdir -p "$CURRENT_KEYD_DIR"
 
 # --------------------------------------------------
-# Enable and start Keyd
+# Backup existing configuration if present
 # --------------------------------------------------
 
-echo
-echo "[SERVICE] Checking Keyd service..."
+if [ -f "$CURRENT_KEYD_CONFIG" ]; then
 
-if systemctl is-active --quiet keyd; then
+    echo
+    echo "[BACKUP] Existing Keyd configuration found."
 
-    echo "[OK] Keyd service is already running."
+    BACKUP_FILE="${CURRENT_KEYD_CONFIG}.bootstrap-backup"
 
-else
+    sudo cp -a "$CURRENT_KEYD_CONFIG" "$BACKUP_FILE"
 
-    echo "[START] Starting Keyd..."
-
-    sudo systemctl enable --now keyd
-
-    echo "[OK] Keyd service started."
+    echo "[OK] Existing configuration backed up to:"
+    echo "$BACKUP_FILE"
 
 fi
 
 # --------------------------------------------------
-# Verify Keyd
+# Copy default.conf from old SSD
+# --------------------------------------------------
+
+echo
+echo "[RESTORE] Copying Keyd default.conf..."
+
+sudo cp -a "$OLD_KEYD_CONFIG" "$CURRENT_KEYD_CONFIG"
+
+echo "[OK] Keyd configuration copied."
+
+# --------------------------------------------------
+# Verify configuration was copied
+# --------------------------------------------------
+
+if [ ! -f "$CURRENT_KEYD_CONFIG" ]; then
+
+    echo "[ERROR] Keyd configuration was not copied correctly."
+
+    exit 1
+
+fi
+
+echo "[OK] Current Keyd configuration exists:"
+echo "$CURRENT_KEYD_CONFIG"
+
+# --------------------------------------------------
+# Show configuration permissions
+# --------------------------------------------------
+
+sudo chmod 644 "$CURRENT_KEYD_CONFIG"
+
+# --------------------------------------------------
+# Restart Keyd so new configuration is loaded
+# --------------------------------------------------
+
+echo
+echo "[SERVICE] Restarting Keyd..."
+
+sudo systemctl daemon-reload
+sudo systemctl enable keyd
+sudo systemctl restart keyd
+
+# --------------------------------------------------
+# Verify Keyd service
 # --------------------------------------------------
 
 if systemctl is-active --quiet keyd; then
@@ -327,7 +346,14 @@ if systemctl is-active --quiet keyd; then
 
 else
 
+    echo
     echo "[ERROR] Keyd failed to start."
+    echo
+    echo "Keyd service status:"
+    sudo systemctl --no-pager --full status keyd || true
+    echo
+    echo "Recent Keyd log:"
+    sudo journalctl -u keyd -n 30 --no-pager || true
 
     exit 1
 
@@ -410,6 +436,15 @@ echo "Keyd:"
 keyd --version 2>/dev/null || true
 
 echo
+echo "Keyd configuration:"
+if [ -f "$CURRENT_KEYD_CONFIG" ]; then
+    echo "[OK] $CURRENT_KEYD_CONFIG exists."
+else
+    echo "[ERROR] $CURRENT_KEYD_CONFIG is missing."
+    exit 1
+fi
+
+echo
 echo "Speedtest:"
 speedtest --version 2>/dev/null || true
 
@@ -420,10 +455,6 @@ python3 --version
 echo
 echo "Old SSD:"
 findmnt "$OLD_SSD_MOUNT"
-
-echo
-echo "Old SSD contents:"
-sudo ls "$OLD_SSD_MOUNT"
 
 echo
 echo "Keyd service:"
